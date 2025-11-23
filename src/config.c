@@ -1893,7 +1893,11 @@ void config_load_ra_pio(struct interface *iface)
 		free(iface->pios);
 		iface->pios = NULL;
 	} else if (iface->pio_cnt != pio_cnt) {
-		iface->pios = realloc(iface->pios, sizeof(struct ra_pio) * iface->pio_cnt);
+		struct ra_pio *tmp;
+
+		tmp = realloc(iface->pios, sizeof(struct ra_pio) * iface->pio_cnt);
+		if (tmp)
+			iface->pios = tmp;
 	}
 }
 
