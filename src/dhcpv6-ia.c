@@ -1636,9 +1636,9 @@ ssize_t dhcpv6_ia_handle_IAs(uint8_t *buf, size_t buflen, struct interface *ifac
 				    hdr->msg_type == DHCPV6_MSG_REQUEST ||
 				    hdr->msg_type == DHCPV6_MSG_REBIND)) {
 				if ((!(a->flags & OAF_STATIC) || !a->hostname) && hostname_len > 0) {
-					char *hostname = realloc(a->hostname, hostname_len + 1);
-					if (hostname) {
-						a->hostname = hostname;
+					char *tmp = realloc(a->hostname, hostname_len + 1);
+					if (tmp) {
+						a->hostname = tmp;
 						memcpy(a->hostname, hostname, hostname_len);
 						a->hostname[hostname_len] = 0;
 
