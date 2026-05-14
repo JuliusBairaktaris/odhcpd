@@ -1410,7 +1410,8 @@ ssize_t dhcpv6_ia_handle_IAs(uint8_t *buf, size_t buflen, struct interface *ifac
 		const struct sockaddr_in6 *addr, const void *data, const uint8_t *end)
 {
 	struct lease *l;
-	struct dhcp_assignment *first = NULL;
+	uint8_t first_key[16];
+	bool first_key_valid = false;
 	const struct dhcpv6_client_header *hdr = data;
 	time_t now = odhcpd_time();
 	uint16_t otype, olen, clid_len = 0;
@@ -1581,8 +1582,8 @@ ssize_t dhcpv6_ia_handle_IAs(uint8_t *buf, size_t buflen, struct interface *ifac
 						a->iface = iface;
 						a->flags = (is_pd ? OAF_DHCPV6_PD : OAF_DHCPV6_NA);
 
-						if (first)
-							memcpy(a->key, first->key, sizeof(a->key));
+						if (first_key_valid)
+							memcpy(a->key, first_key, sizeof(a->key));
 						else
 							odhcpd_urandom(a->key, sizeof(a->key));
 
@@ -1623,7 +1624,7 @@ ssize_t dhcpv6_ia_handle_IAs(uint8_t *buf, size_t buflen, struct interface *ifac
 				/* Send NOTONLINK status for the IA */
 				status = DHCPV6_STATUS_NOTONLINK;
 				assigned = false;
-			} else if (accept_reconf && assigned && !first &&
+			} else if (accept_reconf && assigned && !first_key_valid &&
 					hdr->msg_type != DHCPV6_MSG_REBIND &&
 					buflen >= handshake_len) {
 				buf[0] = 0;
@@ -1652,7 +1653,8 @@ ssize_t dhcpv6_ia_handle_IAs(uint8_t *buf, size_t buflen, struct interface *ifac
 				buflen -= handshake_len;
 				response_len += handshake_len;
 
-				first = a;
+				memcpy(first_key, a->key, sizeof(first_key));
+				first_key_valid = true;
 			}
 
 			ia_response_len = build_ia(buf, buflen, status, ia, a, iface,
