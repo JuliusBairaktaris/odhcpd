@@ -1105,7 +1105,7 @@ static void forward_router_advertisement(const struct interface *iface, uint8_t 
 	/* Rewrite options */
 	uint8_t *end = data + len;
 	uint8_t *mac_ptr = NULL;
-	struct in6_addr *dns_ptr = NULL;
+	struct in6_addr *dns_ptr = NULL, *dns_ptr_orig = NULL;
 	size_t dns_count = 0;
 
 	icmpv6_for_each_option(opt, &adv[1], end) {
@@ -1129,9 +1129,22 @@ static void forward_router_advertisement(const struct interface *iface, uint8_t 
 	all_nodes.sin6_family = AF_INET6;
 	inet_pton(AF_INET6, ALL_IPV6_NODES, &all_nodes.sin6_addr);
 
+	/* Preserve the upstream DNS addresses: they are rewritten in place in the
+	 * single shared packet buffer, so without restoring them a later slave
+	 * would inherit a previous slave's rewritten values. */
+	if (dns_ptr && dns_count > 0) {
+		dns_ptr_orig = alloca(dns_count * sizeof(*dns_ptr_orig));
+		memcpy(dns_ptr_orig, dns_ptr, dns_count * sizeof(*dns_ptr_orig));
+	}
+
 	avl_for_each_element(&interfaces, c, avl) {
 		if (c->ra != MODE_RELAY || c->master)
 			continue;
+
+		/* Restore the upstream DNS addresses that a previous slave may
+		 * have rewritten in the shared buffer. */
+		if (dns_ptr_orig)
+			memcpy(dns_ptr, dns_ptr_orig, dns_count * sizeof(*dns_ptr));
 
 		/* Fixup source hardware address option */
 		if (mac_ptr)
