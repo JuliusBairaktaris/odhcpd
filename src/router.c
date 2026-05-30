@@ -828,6 +828,12 @@ static int send_router_advert(struct interface *iface, const struct in6_addr *fr
 			dns_cnt = 1;
 		}
 
+		/* The RDNSS len field is a uint8_t counting 8-byte units, so it
+		 * holds at most 127 addresses (1 + 2*127 == 255); drop any extra
+		 * so the on-wire length stays consistent with the bytes sent. */
+		if (dns_cnt > 127)
+			dns_cnt = 127;
+
 		if (dns_cnt) {
 			dns_sz = sizeof(*dns) + sizeof(struct in6_addr)*dns_cnt;
 
@@ -849,7 +855,12 @@ static int send_router_advert(struct interface *iface, const struct in6_addr *fr
 			}
 		}
 
-		if (search_len > 0) {
+		/* The DNSSL len field is a uint8_t counting 8-byte units, so the
+		 * whole option must fit in UINT8_MAX*8 bytes; skip it otherwise
+		 * rather than emit an option whose length field does not match
+		 * its real size. */
+		if (search_len > 0 &&
+		    sizeof(*search) + ((search_len + 7) & (~7)) + 8 <= UINT8_MAX * 8) {
 			size_t search_padded = ((search_len + 7) & (~7)) + 8;
 
 			search_sz = sizeof(*search) + search_padded;
