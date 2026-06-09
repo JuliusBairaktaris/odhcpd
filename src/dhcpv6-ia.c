@@ -1637,6 +1637,8 @@ ssize_t dhcpv6_ia_handle_IAs(uint8_t *buf, size_t buflen, struct interface *ifac
 					handshake_len += sizeof(auth);
 				}
 
+				if (handshake_len > buflen)
+					handshake_len = buflen;
 
 				buf += handshake_len;
 				buflen -= handshake_len;
@@ -1718,6 +1720,9 @@ ssize_t dhcpv6_ia_handle_IAs(uint8_t *buf, size_t buflen, struct interface *ifac
 				goto out;
 			}
 		}
+
+		if (ia_response_len > buflen)
+			ia_response_len = buflen;
 
 		buf += ia_response_len;
 		buflen -= ia_response_len;
