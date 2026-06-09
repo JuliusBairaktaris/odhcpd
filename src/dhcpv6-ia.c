@@ -1611,6 +1611,11 @@ ssize_t dhcpv6_ia_handle_IAs(uint8_t *buf, size_t buflen, struct interface *ifac
 				}
 			}
 
+			/* Reconfigure Accept */
+			size_t handshake_len = 4;
+			if (hdr->msg_type == DHCPV6_MSG_REQUEST)
+				handshake_len += sizeof(struct dhcpv6_auth_reconfigure);
+
 			if (!assigned || iface->addr6_len == 0)
 				/* Set error status */
 				status = (is_pd) ? DHCPV6_STATUS_NOPREFIXAVAIL : DHCPV6_STATUS_NOADDRSAVAIL;
@@ -1619,8 +1624,8 @@ ssize_t dhcpv6_ia_handle_IAs(uint8_t *buf, size_t buflen, struct interface *ifac
 				status = DHCPV6_STATUS_NOTONLINK;
 				assigned = false;
 			} else if (accept_reconf && assigned && !first &&
-					hdr->msg_type != DHCPV6_MSG_REBIND) {
-				size_t handshake_len = 4;
+					hdr->msg_type != DHCPV6_MSG_REBIND &&
+					buflen >= handshake_len) {
 				buf[0] = 0;
 				buf[1] = DHCPV6_OPT_RECONF_ACCEPT;
 				buf[2] = 0;
