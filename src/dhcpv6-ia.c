@@ -288,6 +288,45 @@ struct write_ctxt {
 	int buf_idx;
 };
 
+/*
+ * Escape a client-supplied hostname so it is safe to write as a single field
+ * into the space-delimited, line-based state file: every byte that is not a
+ * bare LDH character (the RFC 1035 section 2.3.1 "preferred name syntax" set
+ * accepted by odhcpd_valid_hostname()) is encoded as \xNN. A DHCP client
+ * controls its requested hostname (DHCPv4 option 12, DHCPv6 FQDN option) and,
+ * since DNS labels may carry any octet (RFC 2181 section 11), dn_expand()/the
+ * option parser copy the bytes verbatim - so without escaping a hostname could
+ * embed a newline (forging an extra '#'-prefixed lease record) or a space
+ * (forging additional fields). Valid hostnames are pure LDH and are copied
+ * unchanged. The result is written into dst (always NUL-terminated, truncated
+ * if it would not fit) and returned.
+ */
+static const char *escape_hostname(char *dst, size_t dstlen, const char *src)
+{
+	size_t pos = 0;
+
+	if (dstlen == 0)
+		return dst;
+
+	for (const unsigned char *c = (const unsigned char *)src; *c; c++) {
+		if ((*c >= '0' && *c <= '9') ||
+		    (*c >= 'A' && *c <= 'Z') ||
+		    (*c >= 'a' && *c <= 'z') ||
+		    *c == '-' || *c == '_' || *c == '.') {
+			if (pos + 1 >= dstlen)
+				break;
+			dst[pos++] = *c;
+		} else {
+			if (pos + 4 >= dstlen)
+				break;
+			pos += sprintf(&dst[pos], "\\x%02x", *c);
+		}
+	}
+
+	dst[pos] = '\0';
+	return dst;
+}
+
 static void dhcpv6_write_ia_addrhosts(struct in6_addr *addr, int prefix, _unused uint32_t pref_lt,
 				_unused uint32_t valid_lt, void *arg)
 {
@@ -489,6 +528,7 @@ void dhcpv6_ia_write_statefile(void)
 						continue;
 
 					char duidbuf[264];
+					char hostbuf[256 * 4];
 
 					odhcpd_hexlify(duidbuf, ctxt.c->clid_data, ctxt.c->clid_len);
 
@@ -496,7 +536,8 @@ void dhcpv6_ia_write_statefile(void)
 					ctxt.buf_idx = snprintf(ctxt.buf, ctxt.buf_len, "# %s %s %x %s%s %"PRId64" ",
 								ctxt.iface->ifname, duidbuf, ntohl(ctxt.c->iaid),
 								(ctxt.c->flags & OAF_BROKEN_HOSTNAME) ? "broken\\x20" : "",
-								(ctxt.c->hostname ? ctxt.c->hostname : "-"),
+								escape_hostname(hostbuf, sizeof(hostbuf),
+										ctxt.c->hostname ? ctxt.c->hostname : "-"),
 								(ctxt.c->valid_until > now ?
 									(int64_t)(ctxt.c->valid_until - now + wall_time) :
 									(INFINITE_VALID(ctxt.c->valid_until) ? -1 : 0)));
@@ -526,13 +567,15 @@ void dhcpv6_ia_write_statefile(void)
 
 					char ipbuf[INET6_ADDRSTRLEN];
 					char duidbuf[16];
+					char hostbuf[256 * 4];
 					odhcpd_hexlify(duidbuf, c->hwaddr, sizeof(c->hwaddr));
 
 					/* iface DUID iaid hostname lifetime assigned length [addrs...] */
 					ctxt.buf_idx = snprintf(ctxt.buf, ctxt.buf_len, "# %s %s ipv4 %s%s %"PRId64" %x 32 ",
 								ctxt.iface->ifname, duidbuf,
 								(c->flags & OAF_BROKEN_HOSTNAME) ? "broken\\x20" : "",
-								(c->hostname ? c->hostname : "-"),
+								escape_hostname(hostbuf, sizeof(hostbuf),
+										c->hostname ? c->hostname : "-"),
 								(c->valid_until > now ?
 									(int64_t)(c->valid_until - now + wall_time) :
 									(INFINITE_VALID(c->valid_until) ? -1 : 0)),
