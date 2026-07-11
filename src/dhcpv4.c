@@ -971,7 +971,11 @@ void dhcpv4_handle_msg(void *addr, void *data, size_t len,
 		if (!(iface->ifflags & IFF_NOARP)) {
 			memcpy(arp.arp_ha.sa_data, req->chaddr, 6);
 			memcpy(&arp.arp_pa, &dest, sizeof(arp.arp_pa));
-			memcpy(arp.arp_dev, iface->ifname, sizeof(arp.arp_dev));
+			/* arp_dev is a 16-byte fixed buffer; strdup'd ifname is
+			 * typically shorter than that, so memcpy()ing the full
+			 * field length reads past the allocation. Match the
+			 * strncpy pattern used elsewhere for ifr_name. */
+			strncpy(arp.arp_dev, iface->ifname, sizeof(arp.arp_dev) - 1);
 
 			if (ioctl(sock, SIOCSARP, &arp) < 0)
 				syslog(LOG_ERR, "ioctl(SIOCSARP): %m");
