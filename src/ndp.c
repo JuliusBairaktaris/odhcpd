@@ -90,8 +90,14 @@ int ndp_setup_interface(struct interface *iface, bool enable)
 	procfd = open(procbuf, O_WRONLY);
 
 	if (procfd < 0) {
-		ret = -1;
-		goto out;
+		if (errno != EACCES) {
+			ret = -1;
+			goto out;
+		}
+
+		/* An unprivileged odhcpd cannot write the per-interface knob;
+		 * the kernel ORs it with net.ipv6.conf.all.proxy_ndp. */
+		info("Unable to open %s: %m", procbuf);
 	}
 
 	if (iface->ndp_ping_fd >= 0) {
@@ -105,7 +111,7 @@ int ndp_setup_interface(struct interface *iface, bool enable)
 		iface->ndp_event.uloop.fd = -1;
 
 		if (!enable)
-			if (write(procfd, "0\n", 2) < 0) {}
+			if (procfd >= 0 && write(procfd, "0\n", 2) < 0) {}
 
 		dump_neigh = true;
 	}
@@ -116,7 +122,7 @@ int ndp_setup_interface(struct interface *iface, bool enable)
 		struct icmp6_filter filt;
 		int val = 2;
 
-		if (write(procfd, "1\n", 2) < 0) {}
+		if (procfd >= 0 && write(procfd, "1\n", 2) < 0) {}
 
 		/* Open ICMPv6 socket */
 		iface->ndp_ping_fd = socket(AF_INET6, SOCK_RAW | SOCK_CLOEXEC, IPPROTO_ICMPV6);
